@@ -19,85 +19,106 @@
 
 # Author: Aaron Dettmann
 
-
 from datetime import datetime
-from uuid import uuid4
+from pathlib import Path
+import argparse
+import os
+import sys
+
+import pandas as pd
 
 
-class Task:
-
-    def __init__(self, descr, tags=None, project=None, due=None):
-        self.descr = descr
-        self.tags = tags
-        self.project = project
-        self.due = due
-
-        self._time_created = datetime.now()
-        self._uuid = uuid4()
-
-    @property
-    def uuid(self):
-        return self._uuid
-
-    @property
-    def time_created(self):
-        return self._time_created
+PROG_NAME = "taskman"
+FILE_TASKS = Path(os.path.expanduser(("~/.taskman.json")))
 
 
 class TaskManager:
 
-    def __init__(self, todo=[], done=[]):
-        self.tasks_todo = todo
-        self.tasks_done = done
+    def __init__(self):
+        cols = ['descr', 'project', 'tags', 'due', 'created', 'finished']
+        self.df_tasks = pd.DataFrame(columns=cols)
 
-    @classmethod
-    def load_from_file(file):
-        raise NotImplementedError
+        if not FILE_TASKS.is_file():
+            self.save()
+        else:
+            self.df_tasks = pd.concat([self.df_tasks, pd.read_json(FILE_TASKS)], ignore_index=True)
 
-    def add_todo(self, task):
-        self.tasks_todo.append(task)
+    def save(self):
+        self.df_tasks.to_json(FILE_TASKS, orient='records', indent=4)
 
-    def remove_todo(self, number):
-        if number < 0 or number > len(self.tasks_todo)-1:
-            raise ValueError("invalid task number")
+    def add_task(self, task):
+        task['created'] = str(datetime.now())
+        self.df_tasks.loc[len(self.df_tasks)] = task
 
-        done = self.tasks_todo.pop(number)
-        self.tasks_done.append(done)
+    def mark_task_done(self, index):
+        self.df_tasks.loc[index, 'finished'] = str(datetime.now())
+
+    def delete_task(self, index):
+        self.df_tasks = self.df_tasks.drop(index=index)
 
     def sort_by_due_date():
         raise NotImplementedError
 
-    def list_tasks_todo(self):
-        out = ""
-        for i, task in enumerate(self.tasks_todo):
-            out += f"{i:2d}: {task.descr:30s} {task.time_created} ({task.uuid})\n"
+    def print_list(self, task_type):
+        if task_type == "todo":
+            filtered = self.df_tasks[self.df_tasks['finished'].isna()]
+        elif task_type == "done":
+            filtered = self.df_tasks[self.df_tasks['finished'].notna()]
 
-        return out
+        print(filtered)
 
-    def list_tasks_done(self):
-        out = ""
-        for i, task in enumerate(self.tasks_done):
-            out += f"{i:2d}: {task.descr:30s} {task.time_created} ({task.uuid})\n"
 
-        return out
+def cli():
+    """Command line interface"""
+
+    parser = argparse.ArgumentParser(prog=f'{PROG_NAME}')
+    subparsers = parser.add_subparsers(help='execution modes', dest='exec_mode')
+
+    # ----- Mode 'list' -----
+    sub = subparsers.add_parser('list', help='list tasks')
+    sub.add_argument('type', metavar='TYPE', type=str, help='todo or done')
+
+    # ----- Mode 'todo' -----
+    sub = subparsers.add_parser('todo', help='create a new todo item')
+    sub.add_argument("descr", metavar='DESCRIPTION', help="a description of the task", type=str)
+
+    # ----- Mode 'done' -----
+    sub = subparsers.add_parser('done', help='mark task as done')
+    sub.add_argument('index', metavar='TASK NUMBER', type=int, help='task index', default=1)
+
+    # ----- Mode 'delete' -----
+    sub = subparsers.add_parser('delete', help='delete task from database')
+    sub.add_argument('index', metavar='TASK NUMBER', type=int, help='task index', default=1)
+
+    args = parser.parse_args()
+
+    tm = TaskManager()
+
+    # MODE: list
+    if args.exec_mode == 'list':
+        tm.print_list(args.type)
+
+    # MODE: todo
+    elif args.exec_mode == 'todo':
+        tm.add_task({"descr": args.descr})
+        tm.save()
+
+    # MODE: done
+    elif args.exec_mode == 'done':
+        tm.mark_task_done(args.index)
+        tm.save()
+
+    # MODE: remove
+    elif args.exec_mode == 'delete':
+        tm.delete_task(args.index)
+        tm.save()
+
+    else:
+        parser.print_help()
 
 
 if __name__ == '__main__':
-    tm = TaskManager()
-
-    tm.add_todo(Task("buy groceries"))
-    tm.add_todo(Task("feed cat"))
-    tm.add_todo(Task("clean kitchen"))
-
-    print("-----")
-
-    print(tm.list_tasks_todo())
-    tm.remove_todo(1)
-
-    print("-----")
-
-    print(tm.list_tasks_todo())
-
-    print("-----")
-
-    print(tm.list_tasks_done())
+    try:
+        cli()
+    except KeyboardInterrupt:
+        sys.exit(1)

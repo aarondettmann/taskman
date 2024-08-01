@@ -1,1 +1,1 @@
-MODULE_NAME = 'pkg_name'
+MODULE_NAME = 'taskman'
