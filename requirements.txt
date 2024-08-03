@@ -2,3 +2,6 @@ Sphinx==1.8.5
 bpython
 sphinx-rtd-theme==0.4.3
 tox==3.13.2
+
+rich
+pandas

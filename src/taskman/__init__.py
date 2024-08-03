@@ -1,1 +1,1 @@
-MODULE_NAME = 'taskman'
+PROG_NAME = 'taskman'
