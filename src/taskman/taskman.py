@@ -20,49 +20,68 @@
 from datetime import datetime
 from pathlib import Path
 import os
+import sys
 
 import pandas as pd
 
-from util import P, get_timedelta
+from util import P, now, timedelta_since, timedelta_until
 
 
 FILE_TASKS = Path(os.path.expanduser(("~/.taskman.json")))
+
+
+def datetime_string(string):
+    try:
+        return datetime.fromisoformat(string).isoformat()
+    except (TypeError, ValueError) as e:
+        P.error(f"invalid due date {string!r}. exit...")
+        sys.exit(1)
 
 
 class TaskManager:
     """A simple todo manager"""
 
     def __init__(self):
+        # Pandas dataframe
         cols = ['descr', 'project', 'tags', 'due', 'created', 'finished']
-        self.df_tasks = pd.DataFrame(columns=cols)
+        self.tasks = pd.DataFrame(columns=cols)
 
         if not FILE_TASKS.is_file() or FILE_TASKS.stat().st_size==0:
             self.save()
         else:
-            self.df_tasks = pd.concat([self.df_tasks, pd.read_json(FILE_TASKS)], ignore_index=True)
+            self.tasks = pd.concat([self.tasks, pd.read_json(FILE_TASKS)], ignore_index=True)
 
     def save(self):
-        self.df_tasks.to_json(FILE_TASKS, orient='records', indent=4)
+        self.tasks.to_json(FILE_TASKS, orient='records', indent=4)
 
-    def add_task(self, task):
-        P.info(f"adding task '{task['descr']}'...")
-        task['created'] = str(datetime.now())
-        index = len(self.df_tasks)
-        self.df_tasks.loc[index] = task
-        print(self.df_tasks.iloc[index].to_markdown())
+    def add_task(self, task_dict):
+        P.info(f"adding task {task_dict['descr']!r}...")
+        task_dict['created'] = now()
+
+        if task_dict['due']:
+            task_dict['due'] = datetime_string(task_dict['due'])
+
+        index = len(self.tasks)
+        self.tasks.loc[index] = task_dict
+        P.info("\n" + self.tasks.iloc[index].to_markdown())
 
     def mark_task_done(self, index):
-        if self.df_tasks.loc[index, 'finished'] is not None:
-            P.error(f"task '{self.df_tasks.loc[index, 'descr']}' already finished...")
-            return
+        if not (len(self.tasks) > index):
+            P.error(f"task {index} does not exist...")
+            sys.exit(1)
 
-        self.df_tasks.loc[index, 'finished'] = str(datetime.now())
-        P.info(f"task '{self.df_tasks.loc[index, 'descr']}' done...")
+        if not pd.isna(self.tasks.loc[index, 'finished']):
+            P.error(f"task {self.tasks.loc[index, 'descr']!r} already finished...")
+            sys.exit(1)
+
+        self.tasks.loc[index, 'finished'] = now()
+        P.info(f"task {self.tasks.loc[index, 'descr']!r} done...")
 
     def delete_task(self, index):
         try:
-            P.warning(f"deleting task {index} '{self.df_tasks.loc[index, 'descr']}'...")
-            self.df_tasks = self.df_tasks.drop(index=index)
+            P.warning(f"deleting task {index} {self.tasks.loc[index, 'descr']!r}...")
+            P.warning("\n" + self.tasks.loc[index].to_markdown() + "\n")
+            self.tasks = self.tasks.drop(index=index)
         except KeyError:
             P.warning(f"task {index} does not exist")
 
@@ -70,17 +89,34 @@ class TaskManager:
         for index in indices:
             self.delete_task(index)
 
-    def modify_task(self):
-        raise NotImplementedError
+    def modify_task(self, index, task_dict):
+        P.info(f"modifying task {index}...")
+        P.warning("\n" + self.tasks.iloc[index].to_markdown())
+
+        for key in ['descr', 'project', 'tags']:
+            if task_dict[key]:
+                self.tasks.loc[index, key] = task_dict[key]
+
+        if task_dict['due']:
+            self.tasks.loc[index, 'due'] = string2datetime(task_dict['due'])
+
+
+        P.info("\n" + self.tasks.iloc[index].to_markdown())
 
     def sort_by_due_date(self):
         raise NotImplementedError
 
     def print_list(self, task_type, filter_project="", filter_tags=[]):
+        f = None
         if task_type == "todo":
-            f = self.df_tasks[self.df_tasks['finished'].isna()]
+            f = self.tasks[self.tasks['finished'].isna()]
+            f = f.drop(['finished'], axis=1)
         elif task_type == "done":
-            f = self.df_tasks[self.df_tasks['finished'].notna()]
+            f = self.tasks[self.tasks['finished'].notna()]
+            f.loc[:, 'finished'] = f['finished'].apply(timedelta_since)
+        else:
+            P.error(f"invalid task type {task_type!r}")
+            sys.exit(1)
 
         # Project
         if filter_project:
@@ -91,7 +127,7 @@ class TaskManager:
             f = f[f['tags'].apply(lambda x: x is not None and tag in x)]
 
         # Dates
-        f.loc[:, 'created'] = f['created'].apply(get_timedelta)
-        f.loc[:, 'finished'] = f['finished'].apply(get_timedelta)
+        f.loc[:, 'created'] = f['created'].apply(timedelta_since)
+        f.loc[:, 'due'] = f['due'].apply(timedelta_until)
 
-        print(f.to_markdown())
+        P.info(f.to_markdown())

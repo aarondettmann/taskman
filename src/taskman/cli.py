@@ -41,13 +41,19 @@ def cli():
     sub.add_argument("descr", metavar='DESCRIPTION', help="a description of the task", type=str)
     sub.add_argument('--project', '-p', metavar='PROJECT', type=str, help='project')
     sub.add_argument('--tags', '-t', metavar='TAGS', nargs='+', type=str, help='tags')
+    sub.add_argument('--due', '-d', metavar='TAGS', type=str, help='tags')
 
     # ----- Mode 'done' -----
     sub = subparsers.add_parser('done', help='mark task as done')
     sub.add_argument('index', metavar='TASK NUMBER', type=int, help='task index', default=1)
 
     # ----- Mode 'modify' -----
-    # TODO
+    sub = subparsers.add_parser('modify', help='modify a task')
+    sub.add_argument('index', metavar='TASK NUMBER', type=int, help='task index')
+    sub.add_argument("--descr", metavar='DESCRIPTION', help="a description of the task", type=str)
+    sub.add_argument('--project', '-p', metavar='PROJECT', type=str, help='project')
+    sub.add_argument('--tags', '-t', metavar='TAGS', nargs='+', type=str, help='tags')
+    sub.add_argument('--due', '-d', metavar='TAGS', type=str, help='tags')
 
     # ----- Mode 'delete' -----
     sub = subparsers.add_parser('delete', help='delete task from database')
@@ -71,13 +77,24 @@ def cli():
         tm.add_task({
             "descr": args.descr,
             "project": args.project,
-            "tags": args.tags
+            "tags": args.tags,
+            "due": args.due,
         })
         tm.save()
 
     # MODE: done
     elif args.exec_mode == 'done':
         tm.mark_task_done(args.index)
+        tm.save()
+
+    # MODE: modify
+    elif args.exec_mode == 'modify':
+        tm.modify_task(args.index, {
+            "descr": args.descr,
+            "project": args.project,
+            "tags": args.tags,
+            "due": args.due,
+            })
         tm.save()
 
     # MODE: remove

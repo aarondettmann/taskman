@@ -35,7 +35,7 @@ class P:
 
     @staticmethod
     def info(string):
-        __class__._print(string, "blue")
+        __class__._print(string, "green")
 
     @staticmethod
     def warning(string):
@@ -46,14 +46,40 @@ class P:
         __class__._print(string, "red")
 
 
-def get_timedelta(date_str):
-    if pd.isna(date_str):
+def now():
+    """Return current date and time as string (iso format)"""
+
+    return datetime.now().isoformat()
+
+
+def timedelta(start_date, end_date):
+    """
+    Return a human-readable time delta
+
+    Args:
+        :start_date: start date as string (iso format)
+        :end_date:   end date as string (iso format)
+
+    Returns:
+        Time delta as string '<days> d, <hours> h'
+    """
+
+    if pd.isna(start_date) or pd.isna(end_date):
         return None
 
-    date_obj = datetime.fromisoformat(date_str)
-    delta = datetime.now() - date_obj
+    start_date = datetime.fromisoformat(start_date)
+    end_date   = datetime.fromisoformat(end_date)
+
+    delta = end_date - start_date
 
     days = delta.days
-    seconds = delta.seconds
-    hours, remainder = divmod(seconds, 3600)
+    hours = delta.seconds // 3600
     return f"{days} d, {hours} h"
+
+
+def timedelta_until(until):
+    return timedelta(now(), until)
+
+
+def timedelta_since(since):
+    return timedelta(since, now())
